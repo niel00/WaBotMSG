@@ -1,12 +1,11 @@
 const MenuView = require('../views/MenuView');
+const prefix = require('../config');
+const admins = require('../config');
 
 class MessageController {
     static async handleMessage(sock, msg) {
         const remoteJid = msg.key.remoteJid;
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-
-        // Defina o seu prefixo aqui
-        const prefix = '!';
 
         // 1. Se a mensagem não começar com o prefixo, o bot ignora
         if (!text.startsWith(prefix)) return;
