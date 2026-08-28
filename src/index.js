@@ -2,52 +2,68 @@ const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whis
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 
+// IMPORTANTE: Aqui você importa apenas o seu Controller principal.
+const MessageController = require('./controllers/MessageController');
+
 async function connectToWhatsApp() {
+    // 1. Gerenciamento de Sessão
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
-const sock = makeWASocket({
+    // 2. Inicialização do Bot
+    const sock = makeWASocket({
         auth: state,
-        logger: pino({ level: 'info' }), 
-        browser: ['WaBotMSG', 'Chrome', '1.0.0']
+        logger: pino({ level: 'silent' }), // Oculta logs excessivos da biblioteca
+        browser: ['WaBotMSG', 'Chrome', '1.0.0'] // Nome do seu bot
     });
 
+    // 3. Salva chaves de segurança atualizadas
     sock.ev.on('creds.update', saveCreds);
 
-    // Bloco connection.update 
-sock.ev.on('connection.update', (update) => {
-        // Agora nós pegamos o 'qr' de dentro do update
+    // 4. Monitoramento da Conexão (QR Code e Reconexão)
+    sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
         
-        // Se o WhatsApp mandar um QR Code, nós desenhamos ele pequeno na tela
+        // Desenha o QR Code se necessário
         if (qr) {
-            console.log('Escaneie o QR Code abaixo:');
+            console.log('\n[!] Escaneie o QR Code abaixo para conectar:\n');
             qrcode.generate(qr, { small: true });
         }
         
+        // Lida com fechamento de conexão
         if (connection === 'close') {
             const erroCode = lastDisconnect.error?.output?.statusCode;
             const shouldReconnect = erroCode !== DisconnectReason.loggedOut;
             
-            console.log(`Conexão fechada. Motivo (código): ${erroCode}`);
+            console.log(`\n[!] Conexão fechada. Motivo (código): ${erroCode}`);
 
             if (shouldReconnect) {
-                console.log('Tentando reconectar...');
+                console.log('[!] Tentando reconectar ao WhatsApp...');
                 connectToWhatsApp();
             } else {
-                console.log('Você foi deslogado. Apague a pasta "auth_info_baileys" e reinicie.');
+                console.log('[X] Você foi deslogado. Apague a pasta "auth_info_baileys" e reinicie.');
             }
         } else if (connection === 'open') {
-            console.log('Bot conectado e pronto para uso!');
+            console.log('\n[V] Bot conectado com sucesso e operando em MVC!');
         }
     });
 
+    // 5. Escutando e roteando mensagens
     sock.ev.on('messages.upsert', async m => {
         const msg = m.messages[0];
+        
+        // Filtro: ignora mensagens do próprio bot ou do sistema
         if (!msg.message || msg.key.fromMe) return;
 
-        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-        console.log(`Mensagem recebida de ${msg.key.remoteJid}: ${text}`);
+        // --- AQUI ACONTECE A INTEGRAÇÃO MVC ---
+        // O index.js não tenta ler ou responder o texto. 
+        // Ele apenas "entrega" o problema para o Controller resolver.
+        try {
+            await MessageController.handleMessage(sock, msg);
+        } catch (error) {
+            console.error('[X] Erro no Controller ao processar a mensagem:', error);
+        }
     });
 }
 
+// Inicia o bot
 connectToWhatsApp();
