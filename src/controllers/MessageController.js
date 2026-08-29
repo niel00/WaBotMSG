@@ -1,28 +1,41 @@
 const MenuView = require('../views/MenuView');
-const prefix = require('../config');
-const admins = require('../config');
+const { prefix } = require('../config');
 
 class MessageController {
     static async handleMessage(sock, msg) {
         const remoteJid = msg.key.remoteJid;
-        const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+        const text =
+            msg.message?.conversation ||
+            msg.message?.extendedTextMessage?.text ||
+            msg.message?.imageMessage?.caption ||
+            '';
 
-        // 1. Se a mensagem não começar com o prefixo, o bot ignora
-        if (!text.startsWith(prefix)) return;
+        if (!text) return;
 
-        // 2. Separa a string recebida. Ex: "!info projeto" vira command="info", args=["projeto"]
+        if (!text.startsWith(prefix)) {
+            const response =
+                `Digite *${prefix}menu* para acessar o menu de opções ou *${prefix}ajuda* para obter ajuda.`;
+
+            await sock.sendMessage(remoteJid, { text: response });
+            return;
+        }
+
         const args = text.slice(prefix.length).trim().split(/ +/);
-        const command = args.shift().toLowerCase();
+        const command = args.shift()?.toLowerCase();
+
+        if (!command) return;
 
         let response = '';
 
-        // 3. Roteamento de Comandos
         switch (command) {
             case 'menu':
-            case 'ajuda':
                 response = MenuView.getMainMenu();
                 break;
-            
+
+            case 'ajuda':
+                response = MenuView.getHelpMenu();
+                break;
+
             case 'ping':
                 response = 'Pong! 🏓 Conexão estável e operando.';
                 break;
@@ -32,11 +45,10 @@ class MessageController {
                 break;
 
             default:
-                response = `Comando *${prefix}${command}* não reconhecido. Digite *!menu* para ver as opções.`;
+                response = `Comando *${prefix}${command}* não reconhecido. Digite *${prefix}menu* para ver as opções.`;
         }
 
-        // 4. Envia a resposta de volta ao usuário
-        if (response !== '') {
+        if (response) {
             await sock.sendMessage(remoteJid, { text: response });
         }
     }
